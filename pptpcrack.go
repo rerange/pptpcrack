@@ -280,6 +280,10 @@ func DecryptPPTP(handshake Handshake) {
 	var i int
 	var j int
 	for packet := range packetSource.Packets() {
+		if i % 100 == 0 {
+			wait := "\\|/-"
+			fmt.Printf("\033[2K\rDecrypting packets%s", string(wait[i/100%len(wait)]))
+		}
 		if i < handshake.PacketIndex {
 			i++
 			continue
@@ -318,7 +322,7 @@ func DecryptPPTP(handshake Handshake) {
 		}
 		i++
 	}
-	fmt.Printf("Write %d packets to %s\n", j, *outFilename)
+	fmt.Printf("\033[2K\rWrite %d packets to %s\n", j, *outFilename)
 }
 
 func Decrypt(userName, password string, authenticatorChallenge, peerChallenge, datagram []byte, keyLength int, isSend, isServer bool) []byte {
