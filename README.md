@@ -2,6 +2,16 @@
  
 A Generic EAP/MPPE Implementation in Go By  [Orange](https://github.com/rerange)
 
+## Prerequisite
+
+Install [WinPcap_4_1_3](https://www.winpcap.org/install/default.htm) for Windows or [libpcap](https://formulae.brew.sh/formula/libpcap) for MacOS or other linux distributions
+
+For MacOS users:
+
+```sh
+brew install tcpdump
+```
+
 ## RFC Reference
 
 1. Microsoft PPP CHAP Extensions, Version 2: [RFC2759](https://tools.ietf.org/html/rfc2759)

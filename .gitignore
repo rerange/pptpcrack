@@ -1,6 +1,7 @@
-*_win32.exe
+*.exe
 *_darwin64
 data
 reference
+prerequisite
 .DS_Store
 .vscode
