@@ -41,10 +41,12 @@ var outFilename = flag.String("o", "", "Filename of decrypted packets to write t
 var wordlist = flag.String("w", "", "Filename of password list to crack MS-CHAP-V2 handshake")
 
 type Handshake struct {
+	KeyLength              int
+	PacketIndex            int
+	IsSucceed              bool
 	ServerName             string
 	UserName               string
 	Password               string
-	KeyLength              int
 	AuthenticatorResponse  string
 	AuthenticatorChallenge []byte
 	PeerChallenge          []byte
@@ -60,8 +62,6 @@ type Handshake struct {
 	ServerSessionKey       []byte
 	PeerIP                 net.IP
 	AuthenticatorIP        net.IP
-	PacketIndex            int
-	IsSucceed              bool
 }
 
 var handshakes = map[string]Handshake{}
