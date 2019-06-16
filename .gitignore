@@ -1,7 +1,6 @@
 *_win32.exe
 *_darwin64
-data/test_decrypt.pcap
-data/test2.pcap
+data
 reference
 .DS_Store
 .vscode
