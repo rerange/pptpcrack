@@ -232,7 +232,7 @@ func Crack() {
 		if match {
 			deltaTime := float64(time.Since(startTime).Nanoseconds()) / 1e9
 			fmt.Printf("\033[K\r%s:%x:%x:%s", handshake.UserName, handshake.NtResponse[:4], ntResponse[:4], word)
-			fmt.Printf("\n\nPassword Found(tested %d words in %.2fs): %s \n", tested, deltaTime, word)
+			fmt.Printf("\n\nPassword Found(%.2f k/s): %s \n", float64(tested)/deltaTime, word)
 			fmt.Printf("\tActual NtResponse:  %x\n", ntResponse)
 			fmt.Printf("\tDesired NtResponse: %x\n\n", handshake.NtResponse)
 			if handshake.KeyLength != 0 {
@@ -247,7 +247,7 @@ func Crack() {
 	}
 	deltaTime := float64(time.Since(startTime).Nanoseconds()) / 1e9
 	fmt.Printf("\n\nPassword Not Found!\n")
-	fmt.Printf("Tested %d words in %.2fs\n", tested, deltaTime)
+	fmt.Printf("Tested %d words in %.2fs(%.2f k/s)\n", tested, deltaTime, float64(tested)/deltaTime)
 }
 
 func Test() {
