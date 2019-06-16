@@ -221,7 +221,7 @@ func GetNewKeyFromSHA(startKey, sessionKey []byte, sessionKeyLength int) []byte 
 func ReduceSessionKey(sendSessionKey []byte, keyLength int) []byte {
 	// Reduce key size appropriately
 	// https://tools.ietf.org/html/rfc3079#section-3.1 3.2 & 3.3
-	
+
 	if keyLength == 40 {
 		return append([]byte("\xd1\x26\x9e"), sendSessionKey[3:]...)
 	}

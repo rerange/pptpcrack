@@ -17,3 +17,5 @@ windows:
 	GOOS=windows GOARCH=386 go build -o ${NAME}_win32.exe ${NAME}.go
 linux:
 	GOOS=linux GOARCH=amd64 go build -o ${NAME}_linux64 ${NAME}.go
+install: darwin
+	cp ./${NAME}_darwin64 /usr/local/bin/${NAME}

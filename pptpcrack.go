@@ -9,8 +9,8 @@
 package main
 
 import (
-	"bytes"
 	"bufio"
+	"bytes"
 	"encoding/binary"
 	"encoding/hex"
 	"flag"
@@ -18,8 +18,8 @@ import (
 	"log"
 	"net"
 	"os"
-	"strings"
 	"strconv"
+	"strings"
 
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/layers"
@@ -29,28 +29,27 @@ import (
 	"./eap"
 )
 
-
-const SnapshotLen = 2<<18
+const SnapshotLen = 2 << 18
 
 var filename = flag.String("f", "", "Filename of dump file to read from")
 var outFilename = flag.String("o", "", "Filename of decrypted packets to write to")
 var wordlist = flag.String("w", "", "Filename of password list to crack MS-CHAP-V2 handshake")
 
 type Handshake struct {
-	ServerName string
-	UserName string
-	Password string
-	KeyLength int
-	AuthenticatorResponse string
+	ServerName             string
+	UserName               string
+	Password               string
+	KeyLength              int
+	AuthenticatorResponse  string
 	AuthenticatorChallenge []byte
-	PeerChallenge []byte
-	NtResponse []byte
-	PasswordHash   []byte
-	MasterKey []byte
-	PeerIP net.IP
-	AuthenticatorIP net.IP
-	PacketIndex int
-	IsSucceed  bool
+	PeerChallenge          []byte
+	NtResponse             []byte
+	PasswordHash           []byte
+	MasterKey              []byte
+	PeerIP                 net.IP
+	AuthenticatorIP        net.IP
+	PacketIndex            int
+	IsSucceed              bool
 }
 
 var handshakes = map[string]Handshake{}
@@ -87,26 +86,27 @@ func Crack() {
 	var phaseStart int
 	var handshake = Handshake{}
 	for packet := range packetSource.Packets() {
+		i++
 		ppp := packet.Layer(layers.LayerTypePPP)
 		if ppp != nil {
 			ipLayer := packet.Layer(layers.LayerTypeIPv4)
 			ip, _ := ipLayer.(*layers.IPv4)
 			ppp, _ := ppp.(*layers.PPP)
-			// PPP CHAP Protocol or PPP Compress Control Protocol
 			if bytes.Equal(ppp.LayerContents(), []byte("\xc2\x23")) || bytes.Equal(ppp.LayerContents(), []byte("\x80\xfd")) {
 				if phaseStart < i-10 {
 					phaseStart = 0
 					handshake = Handshake{}
 				}
+				// PPP CHAP Protocol
 				if bytes.Equal(ppp.LayerContents(), []byte("\xc2\x23")) {
 					// Challenge
-					if phase == 0  && ppp.LayerPayload()[0] == byte(0x1) {
+					if phase == 0 && ppp.LayerPayload()[0] == byte(0x1) {
 						phaseStart = i
 						phase = 1
-						length :=  int(binary.BigEndian.Uint16(ppp.LayerPayload()[2:4]))
+						length := int(binary.BigEndian.Uint16(ppp.LayerPayload()[2:4]))
 						valueSize := int(ppp.LayerPayload()[4])
-						authenticatorChallenge := ppp.LayerPayload()[5:5+valueSize]
-						serverName := string(ppp.LayerPayload()[5+valueSize:length])
+						authenticatorChallenge := ppp.LayerPayload()[5 : 5+valueSize]
+						serverName := string(ppp.LayerPayload()[5+valueSize : length])
 						handshake.AuthenticatorChallenge = authenticatorChallenge
 						handshake.ServerName = serverName
 						handshake.PacketIndex = i
@@ -119,60 +119,60 @@ func Crack() {
 							continue
 						}
 						phase = 2
-						length :=  int(binary.BigEndian.Uint16(ppp.LayerPayload()[2:4]))
+						length := int(binary.BigEndian.Uint16(ppp.LayerPayload()[2:4]))
 						valueSize := int(ppp.LayerPayload()[4])
-						peerChallenge := ppp.LayerPayload()[5:5+16]
-						ntResponse := ppp.LayerPayload()[29:29+24]
-						userName := string(ppp.LayerPayload()[5+valueSize:length])
+						peerChallenge := ppp.LayerPayload()[5 : 5+16]
+						ntResponse := ppp.LayerPayload()[29 : 29+24]
+						userName := string(ppp.LayerPayload()[5+valueSize : length])
 						handshake.PeerChallenge = peerChallenge
 						handshake.NtResponse = ntResponse
 						handshake.UserName = userName
 					}
-					// Success 
+					// Success
 					if phase == 2 && ppp.LayerPayload()[0] == byte(0x3) {
 						if fmt.Sprintf("%s", handshake.AuthenticatorIP) != fmt.Sprintf("%s", ip.SrcIP) && fmt.Sprintf("%s", handshake.PeerIP) != fmt.Sprintf("%s", ip.DstIP) {
 							continue
 						}
-						phase = 3
-						length :=  int(binary.BigEndian.Uint16(ppp.LayerPayload()[2:4]))
+						phase = 0
+						length := int(binary.BigEndian.Uint16(ppp.LayerPayload()[2:4]))
 						authenticatorResponse := string(ppp.LayerPayload()[4:length])
 						handshake.AuthenticatorResponse = authenticatorResponse
 						handshake.IsSucceed = true
-					}
-				}
-
-				if bytes.Equal(ppp.LayerContents(), []byte("\x80\xfd")) {
-					if phase == 3 && ppp.LayerPayload()[0]==0x01 && ppp.LayerPayload()[4]==0x12 {
-						phase = 0
-						length := int(binary.BigEndian.Uint16(ppp.LayerPayload()[2:4]))
-						keyFlag := ppp.LayerPayload()[length-1]
-						if keyFlag & 0x80 > 0x10 {
-							handshake.KeyLength = 56
-						} else if keyFlag & 0x40 > 0x10 {
-							handshake.KeyLength = 128
-						} else if keyFlag & 0x20 > 0x10 {
-							handshake.KeyLength = 40
-						} else {
-							panic("Invalid KeyLength!")
-						}
-						
 						var newHandshake = handshake
 						if _, ok := handshakes[newHandshake.AuthenticatorIP.String()]; !ok {
 							handshakes[newHandshake.AuthenticatorIP.String()] = newHandshake
-							fmt.Printf("Found Handshake: %s(%s)<->%s (NAME=%s, VALUE=%x, KeyLength=%d)\n", handshake.AuthenticatorIP, handshake.ServerName, handshake.PeerIP, handshake.UserName, handshake.NtResponse, handshake.KeyLength)
+							fmt.Printf("Found Handshake: %s(%s)<->%s (NAME=%s, VALUE=%x)\n", handshake.AuthenticatorIP, handshake.ServerName, handshake.PeerIP, handshake.UserName, handshake.NtResponse)
 						}
 						handshake = Handshake{}
 					}
 				}
+				// PPP Compress Control Protocol
+				if bytes.Equal(ppp.LayerContents(), []byte("\x80\xfd")) {
+					if v, ok := handshakes[ip.DstIP.String()]; ok {
+						if phase == 0 && ppp.LayerPayload()[0] == 0x01 && ppp.LayerPayload()[4] == 0x12 {
+							length := int(binary.BigEndian.Uint16(ppp.LayerPayload()[2:4]))
+							keyFlag := ppp.LayerPayload()[length-1]
+							if keyFlag&0x80 > 0x10 {
+								v.KeyLength = 56
+							} else if keyFlag&0x40 > 0x10 {
+								v.KeyLength = 128
+							} else if keyFlag&0x20 > 0x10 {
+								v.KeyLength = 40
+							}
+							handshakes[ip.DstIP.String()] = v
+						}
+					}
+				}
 			}
-			
 		}
-		i++
 	}
 
 	var j = 0
 	var handshakeId = make([]string, 0)
 	for k, v := range handshakes {
+		if !v.IsSucceed {
+			continue
+		}
 		if j == 0 {
 			fmt.Printf("Handshake: \n")
 		}
@@ -212,14 +212,16 @@ func Crack() {
 	scanner := bufio.NewScanner(wordFile)
 	for scanner.Scan() {
 		word := strings.TrimSpace(scanner.Text())
-		ntResponse, match := Verify(handshake.UserName, word, handshake.AuthenticatorChallenge, handshake.PeerChallenge, handshake.NtResponse, handshake.KeyLength )
+		ntResponse, match := Verify(handshake.UserName, word, handshake.AuthenticatorChallenge, handshake.PeerChallenge, handshake.NtResponse, handshake.KeyLength)
 		if match {
 			fmt.Printf("\033[2K\r%s:%x:%x:%s", handshake.UserName, handshake.NtResponse[:4], ntResponse[:4], word)
 			fmt.Printf("\n\nPassword Found: %s\n", word)
 			fmt.Printf("\tActual NtResponse:  %x\n", ntResponse)
 			fmt.Printf("\tDesired NtResponse: %x\n\n", handshake.NtResponse)
-			handshake.Password = word
-			DecryptPPTP(handshake)
+			if handshake.KeyLength != 0 {
+				handshake.Password = word
+				DecryptPPTP(handshake)
+			}
 			return
 		} else {
 			fmt.Printf("\033[2K\r%s:%x:%x:%s", handshake.UserName, handshake.NtResponse[:4], ntResponse[:4], word)
@@ -228,8 +230,7 @@ func Crack() {
 	fmt.Printf("\n\nPassword Not Found!\n")
 }
 
-
-func Test(){
+func Test() {
 	userName := "vpnuser"
 	password := "vpnuser123"
 	authenticatorChallenge := h2b("05b2f10bdc3d6c92b6cd160adee148b4")
@@ -254,7 +255,7 @@ func Verify(userName, password string, authenticatorChallenge, peerChallenge, nt
 	challenge := eap.ChallengeHash(peerChallenge, authenticatorChallenge, userName)
 	ntResponse = eap.ChallengeResponse(challenge, passwordHash)
 	if bytes.Equal(ntResponseDesire, ntResponse) {
-		valid = true 
+		valid = true
 	}
 	return
 }
@@ -285,7 +286,7 @@ func DecryptPPTP(handshake Handshake) {
 			ppp, _ := ppp.(*layers.PPP)
 			// PPP Compressed Datagram
 			if bytes.Equal(ppp.LayerContents(), []byte("\xfd")) {
-				if ppp.LayerPayload()[0] ^ 0x90 > 0x10 {
+				if ppp.LayerPayload()[0]^0x90 > 0x10 {
 					continue
 				}
 				var plaintext []byte
@@ -321,7 +322,7 @@ func Decrypt(userName, password string, authenticatorChallenge, peerChallenge, d
 	challenge := eap.ChallengeHash(peerChallenge, authenticatorChallenge, userName)
 	NTResponse := eap.ChallengeResponse(challenge, passwordHash)
 	// authenticatorResponse := eap.GenerateAuthenticatorResponse(password, NTResponse, peerChallenge, authenticatorChallenge, userName)
-	
+
 	// fmt.Printf("UserName: %s\n", userName)
 	// fmt.Printf("Password: %s\n", password)
 	// fmt.Printf("NTResponse: %x\n", NTResponse)
@@ -341,8 +342,8 @@ func Decrypt(userName, password string, authenticatorChallenge, peerChallenge, d
 	sessionStartKey := eap.GetNewKeyFromSHA(masterStartKey, masterStartKey, length)
 	sessionStartKey = eap.ReduceSessionKey(sessionStartKey, keyLength)
 
-	packetCounter, err := strconv.ParseInt(hex.EncodeToString(datagram)[1:4], 16, 64) 
-	
+	packetCounter, err := strconv.ParseInt(hex.EncodeToString(datagram)[1:4], 16, 64)
+
 	if err != nil {
 		log.Fatal(err)
 	}
