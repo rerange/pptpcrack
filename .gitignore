@@ -1,0 +1,6 @@
+*_win32.exe
+*_darwin64
+data/test_decrypt.pcap
+reference
+.DS_Store
+.vscode
