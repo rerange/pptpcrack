@@ -290,10 +290,7 @@ func DecryptPPTP(handshake Handshake) {
 	w := pcapgo.NewWriter(f)
 	w.WriteFileHeader(SnapshotLen, layers.LinkTypeEthernet)
 	defer f.Close()
-	var i int
-	var j int
-	var clientSessionCounter = -1
-	var serverSessionCounter = -1
+
 	masterKey, serverMasterStartKey, serverSessionStartKey := MPPE(handshake.UserName, handshake.Password, handshake.AuthenticatorChallenge, handshake.PeerChallenge, handshake.KeyLength, false, false)
 	handshake.MasterKey = masterKey
 	handshake.ServerMasterStartKey = serverMasterStartKey
@@ -303,7 +300,10 @@ func DecryptPPTP(handshake Handshake) {
 	handshake.ClientMasterStartKey = clientMasterStartKey
 	handshake.ClientSessionStartKey = clientSessionStartKey
 	handshake.ClientSessionKey = clientSessionStartKey
-
+	var clientSessionCounter = -1
+	var serverSessionCounter = -1
+	var i int
+	var j int
 	for packet := range packetSource.Packets() {
 		if i%100 == 0 {
 			wait := "\\|/-"
@@ -325,6 +325,7 @@ func DecryptPPTP(handshake Handshake) {
 					continue
 				}
 				var plain []byte
+
 				// Authenticator -> Peer
 				if fmt.Sprintf("%s", handshake.AuthenticatorIP) == fmt.Sprintf("%s", ip.SrcIP) && fmt.Sprintf("%s", handshake.PeerIP) == fmt.Sprintf("%s", ip.DstIP) {
 					plaintext, sessionKey, sessionCounter := Decrypt(ppp.LayerPayload(), handshake.ServerMasterStartKey, handshake.ServerSessionKey, handshake.KeyLength, serverSessionCounter)
@@ -340,6 +341,7 @@ func DecryptPPTP(handshake Handshake) {
 					clientSessionCounter = sessionCounter
 					handshake.ClientSessionKey = sessionKey
 				}
+
 				if plain != nil {
 					ethernetLayer := packet.Layer(layers.LayerTypeEthernet)
 					if ethernetLayer != nil {
@@ -402,9 +404,9 @@ func Decrypt(datagram, masterStartKey, sessionKey []byte, keyLength, sessionCoun
 	plaintext := make([]byte, len(ciphertext))
 	rc4key.XORKeyStream(plaintext, ciphertext)
 	if plaintext[0] == 0x00 && plaintext[1] == 0x21 {
-		return plaintext, sessionKey, sessionCounter + 1
+		return plaintext, sessionKey, int(packetCounter)
 	}
-	return nil, sessionKey, sessionCounter + 1
+	return nil, sessionKey, int(packetCounter)
 }
 
 func GetSessionKey(masterKey, sessionStartKey []byte, keyLength, sessionCounter int) (sessionKey []byte) {
