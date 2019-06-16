@@ -22,10 +22,10 @@ import (
 )
 
 func main() {
-	userName := "vpnuser"
+	userName := "vpnusertest"
 	password := "vpnuser123"
-	authenticatorChallenge := h2b("d3e250af8c49b62418d5292170c85f71")
-	peerChallenge := h2b("6a73eac6c3b458bf549eb0ad26e1b717")
+	authenticatorChallenge := h2b("6e8ac8094068dc246e02fe628b05e3d5")
+	peerChallenge := h2b("8a19a236d5bced1f528342ff6dc07c64")
 	keyLength := 128
 	Verify2(userName, password, authenticatorChallenge, peerChallenge, keyLength)
 }

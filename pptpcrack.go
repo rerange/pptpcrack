@@ -25,6 +25,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/layers"
@@ -41,27 +42,27 @@ var outFilename = flag.String("o", "", "Filename of decrypted packets to write t
 var wordlist = flag.String("w", "", "Filename of password list to crack MS-CHAP-V2 handshake")
 
 type Handshake struct {
-	KeyLength              int
-	PacketIndex            int
-	IsSucceed              bool
-	ServerName             string
-	UserName               string
-	Password               string
-	AuthenticatorResponse  string
-	AuthenticatorChallenge []byte
-	PeerChallenge          []byte
-	NtResponse             []byte
-	PasswordHash           []byte
-	PasswordHashHash       []byte
-	MasterKey              []byte
-	ClientMasterStartKey   []byte
-	ServerMasterStartKey   []byte
-	ClientSessionStartKey  []byte
-	ServerSessionStartKey  []byte
-	ClientSessionKey       []byte
-	ServerSessionKey       []byte
-	PeerIP                 net.IP
-	AuthenticatorIP        net.IP
+	KeyLength               int
+	PacketIndex             int
+	IsSucceed               bool
+	ServerName              string
+	UserName                string
+	Password                string
+	AuthenticatorResponse   string
+	AuthenticatorChallenge  []byte
+	PeerChallenge           []byte
+	NtResponse              []byte
+	PasswordHash            []byte
+	PasswordHashHash        []byte
+	MasterKey               []byte
+	ClientMasterSessionKey  []byte
+	ServerMasterSessionKey  []byte
+	ClientInitialSessionKey []byte
+	ServerInitialSessionKey []byte
+	ClientSessionKey        []byte
+	ServerSessionKey        []byte
+	PeerIP                  net.IP
+	AuthenticatorIP         net.IP
 }
 
 var handshakes = map[string]Handshake{}
@@ -223,12 +224,15 @@ func Crack() {
 	handshake = handshakes[handshakeId[num]]
 
 	scanner := bufio.NewScanner(wordFile)
+	startTime := time.Now()
+	var tested int
 	for scanner.Scan() {
 		word := strings.TrimSpace(scanner.Text())
 		ntResponse, match := Verify(handshake.UserName, word, handshake.AuthenticatorChallenge, handshake.PeerChallenge, handshake.NtResponse, handshake.KeyLength)
 		if match {
+			deltaTime := float64(time.Since(startTime).Nanoseconds()) / 1e9
 			fmt.Printf("\033[K\r%s:%x:%x:%s", handshake.UserName, handshake.NtResponse[:4], ntResponse[:4], word)
-			fmt.Printf("\n\nPassword Found: %s\n", word)
+			fmt.Printf("\n\nPassword Found(tested %d words in %.2fs): %s \n", tested, deltaTime, word)
 			fmt.Printf("\tActual NtResponse:  %x\n", ntResponse)
 			fmt.Printf("\tDesired NtResponse: %x\n\n", handshake.NtResponse)
 			if handshake.KeyLength != 0 {
@@ -239,8 +243,11 @@ func Crack() {
 		} else {
 			fmt.Printf("\033[K\r%s:%x:%x:%s", handshake.UserName, handshake.NtResponse[:4], ntResponse[:4], word)
 		}
+		tested++
 	}
+	deltaTime := float64(time.Since(startTime).Nanoseconds()) / 1e9
 	fmt.Printf("\n\nPassword Not Found!\n")
+	fmt.Printf("Tested %d words in %.2fs\n", tested, deltaTime)
 }
 
 func Test() {
@@ -253,12 +260,12 @@ func Test() {
 	capture := h2b("4500008900d140007f0612efc0a82b683dd5bdc9f41800501069adb06036344e5018ffffd1720000474554202f6e6373692e74787420485454502f312e310d0a436f6e6e656374696f6e3a20436c6f73650d0a557365722d4167656e743a204d6963726f736f6674204e4353490d0a486f73743a207777772e6d7366746e6373692e636f6d0d0a0d0a")
 	// 1590 plaintext:     0021 4500008900d14000 800611e8 c0a82b6f 3dd5bdc9 cc3d 0050 1069adb06036344e5018ffff f946 0000474554202f6e6373692e74787420485454502f312e310d0a436f6e6e656374696f6e3a20436c6f73650d0a557365722d4167656e743a204d6963726f736f6674204e4353490d0a486f73743a207777772e6d7366746e6373692e636f6d0d0a0d0a
 	// 1592  capture:           4500008900d14000 7f0612ef c0a82b68 3dd5bdc9 f418 0050 1069adb06036344e5018ffff d172 0000474554202f6e6373692e74787420485454502f312e310d0a436f6e6e656374696f6e3a20436c6f73650d0a557365722d4167656e743a204d6963726f736f6674204e4353490d0a486f73743a207777772e6d7366746e6373692e636f6d0d0a0d0a")
-	masterKey, serverMasterStartKey, serverSessionStartKey := MPPE(userName, password, authenticatorChallenge, peerChallenge, keyLength, false, false)
-	masterKey, clientMasterStartKey, clientSessionStartKey := MPPE(userName, password, authenticatorChallenge, peerChallenge, keyLength, true, false)
+	masterKey, serverMasterSessionKey, serverInitialSessionKey := MPPE(userName, password, authenticatorChallenge, peerChallenge, keyLength, false, false)
+	masterKey, clientMasterSessionKey, clientInitialSessionKey := MPPE(userName, password, authenticatorChallenge, peerChallenge, keyLength, true, false)
 	_ = masterKey
-	_ = serverMasterStartKey
-	_ = serverSessionStartKey
-	plaintext, _, _ := Decrypt(datagram, clientMasterStartKey, clientSessionStartKey, keyLength, -1)
+	_ = serverMasterSessionKey
+	_ = serverInitialSessionKey
+	plaintext, _, _ := Decrypt(datagram, clientMasterSessionKey, clientInitialSessionKey, keyLength, -1)
 	if plaintext != nil && bytes.Equal(capture[:8], plaintext[2:10]) {
 		fmt.Println("Decryption Succeed!")
 		fmt.Printf("\tClient -> Server (Decrypted): %x\n", plaintext)
@@ -291,15 +298,15 @@ func DecryptPPTP(handshake Handshake) {
 	w.WriteFileHeader(SnapshotLen, layers.LinkTypeEthernet)
 	defer f.Close()
 
-	masterKey, serverMasterStartKey, serverSessionStartKey := MPPE(handshake.UserName, handshake.Password, handshake.AuthenticatorChallenge, handshake.PeerChallenge, handshake.KeyLength, false, false)
+	masterKey, serverMasterSessionKey, serverInitialSessionKey := MPPE(handshake.UserName, handshake.Password, handshake.AuthenticatorChallenge, handshake.PeerChallenge, handshake.KeyLength, false, false)
 	handshake.MasterKey = masterKey
-	handshake.ServerMasterStartKey = serverMasterStartKey
-	handshake.ServerSessionStartKey = serverSessionStartKey
-	handshake.ServerSessionKey = serverSessionStartKey
-	masterKey, clientMasterStartKey, clientSessionStartKey := MPPE(handshake.UserName, handshake.Password, handshake.AuthenticatorChallenge, handshake.PeerChallenge, handshake.KeyLength, true, false)
-	handshake.ClientMasterStartKey = clientMasterStartKey
-	handshake.ClientSessionStartKey = clientSessionStartKey
-	handshake.ClientSessionKey = clientSessionStartKey
+	handshake.ServerMasterSessionKey = serverMasterSessionKey
+	handshake.ServerInitialSessionKey = serverInitialSessionKey
+	handshake.ServerSessionKey = serverInitialSessionKey
+	masterKey, clientMasterSessionKey, clientInitialSessionKey := MPPE(handshake.UserName, handshake.Password, handshake.AuthenticatorChallenge, handshake.PeerChallenge, handshake.KeyLength, true, false)
+	handshake.ClientMasterSessionKey = clientMasterSessionKey
+	handshake.ClientInitialSessionKey = clientInitialSessionKey
+	handshake.ClientSessionKey = clientInitialSessionKey
 	var clientSessionCounter = -1
 	var serverSessionCounter = -1
 	var i int
@@ -328,7 +335,7 @@ func DecryptPPTP(handshake Handshake) {
 
 				// Authenticator -> Peer
 				if fmt.Sprintf("%s", handshake.AuthenticatorIP) == fmt.Sprintf("%s", ip.SrcIP) && fmt.Sprintf("%s", handshake.PeerIP) == fmt.Sprintf("%s", ip.DstIP) {
-					plaintext, sessionKey, sessionCounter := Decrypt(ppp.LayerPayload(), handshake.ServerMasterStartKey, handshake.ServerSessionKey, handshake.KeyLength, serverSessionCounter)
+					plaintext, sessionKey, sessionCounter := Decrypt(ppp.LayerPayload(), handshake.ServerMasterSessionKey, handshake.ServerSessionKey, handshake.KeyLength, serverSessionCounter)
 					plain = plaintext
 					serverSessionCounter = sessionCounter
 					handshake.ServerSessionKey = sessionKey
@@ -336,7 +343,7 @@ func DecryptPPTP(handshake Handshake) {
 
 				// Peer -> Authenticator
 				if fmt.Sprintf("%s", handshake.PeerIP) == fmt.Sprintf("%s", ip.SrcIP) && fmt.Sprintf("%s", handshake.AuthenticatorIP) == fmt.Sprintf("%s", ip.DstIP) {
-					plaintext, sessionKey, sessionCounter := Decrypt(ppp.LayerPayload(), handshake.ClientMasterStartKey, handshake.ClientSessionKey, handshake.KeyLength, clientSessionCounter)
+					plaintext, sessionKey, sessionCounter := Decrypt(ppp.LayerPayload(), handshake.ClientMasterSessionKey, handshake.ClientSessionKey, handshake.KeyLength, clientSessionCounter)
 					plain = plaintext
 					clientSessionCounter = sessionCounter
 					handshake.ClientSessionKey = sessionKey
@@ -361,14 +368,13 @@ func DecryptPPTP(handshake Handshake) {
 
 func MPPE(userName, password string, authenticatorChallenge, peerChallenge []byte, keyLength int, isSend, isServer bool) ([]byte, []byte, []byte) {
 	passwordHash := eap.NtPasswordHash(password)
-	passwordHashHash := eap.HashNtPasswordHash(passwordHash)
 	challenge := eap.ChallengeHash(peerChallenge, authenticatorChallenge, userName)
-	NTResponse := eap.ChallengeResponse(challenge, passwordHash)
-	// authenticatorResponse := eap.GenerateAuthenticatorResponse(password, NTResponse, peerChallenge, authenticatorChallenge, userName)
+	NtResponse := eap.ChallengeResponse(challenge, passwordHash)
 
+	// authenticatorResponse := eap.GenerateAuthenticatorResponse(password, NtResponse, peerChallenge, authenticatorChallenge, userName)
 	// fmt.Printf("UserName: %s\n", userName)
 	// fmt.Printf("Password: %s\n", password)
-	// fmt.Printf("NTResponse: %x\n", NTResponse)
+	// fmt.Printf("NtResponse: %x\n", NtResponse)
 	// fmt.Printf("AuthenticatorResponse: %s\n\n", authenticatorResponse)
 
 	var length int
@@ -380,15 +386,16 @@ func MPPE(userName, password string, authenticatorChallenge, peerChallenge []byt
 		length = 32
 	}
 
-	masterKey := eap.GetMasterKey(passwordHashHash, NTResponse)
-	masterStartKey := eap.GetAsymmetricStartKey(masterKey, length, isSend, isServer)
-	sessionStartKey := eap.GetNewKeyFromSHA(masterStartKey, masterStartKey, length)
-	sessionStartKey = eap.ReduceSessionKey(sessionStartKey, keyLength)
+	passwordHashHash := eap.HashNtPasswordHash(passwordHash)
+	masterKey := eap.GetMasterKey(passwordHashHash, NtResponse)
+	masterSessionKey := eap.GetAsymmetricStartKey(masterKey, length, isSend, isServer)
+	initialSessionKey := eap.GetNewKeyFromSHA(masterSessionKey, masterSessionKey, length)
+	initialSessionKey = eap.ReduceSessionKey(initialSessionKey, keyLength)
 
-	return masterKey, masterStartKey, sessionStartKey
+	return masterKey, masterSessionKey, initialSessionKey
 }
 
-func Decrypt(datagram, masterStartKey, sessionKey []byte, keyLength, sessionCounter int) ([]byte, []byte, int) {
+func Decrypt(datagram, masterSessionKey, sessionKey []byte, keyLength, sessionCounter int) ([]byte, []byte, int) {
 	packetCounter, err := strconv.ParseInt(hex.EncodeToString(datagram)[1:4], 16, 64)
 
 	if err != nil {
@@ -396,7 +403,7 @@ func Decrypt(datagram, masterStartKey, sessionKey []byte, keyLength, sessionCoun
 	}
 	ciphertext := datagram[2:]
 
-	sessionKey = GetIncrementedSessionKey(masterStartKey, sessionKey, keyLength, sessionCounter, int(packetCounter))
+	sessionKey = GetIncrementedSessionKey(masterSessionKey, sessionKey, keyLength, sessionCounter, int(packetCounter))
 	rc4key, err := eap.NewRC4key(sessionKey)
 	if err != nil {
 		log.Fatal(err)
@@ -409,8 +416,8 @@ func Decrypt(datagram, masterStartKey, sessionKey []byte, keyLength, sessionCoun
 	return nil, sessionKey, int(packetCounter)
 }
 
-func GetSessionKey(masterKey, sessionStartKey []byte, keyLength, sessionCounter int) (sessionKey []byte) {
-	sessionKey = sessionStartKey
+func GetSessionKey(masterKey, initialSessionKey []byte, keyLength, sessionCounter int) (sessionKey []byte) {
+	sessionKey = initialSessionKey
 	for i := 0; i < sessionCounter; i++ {
 		sessionKey = GetNextKey(masterKey, sessionKey, keyLength)
 	}
