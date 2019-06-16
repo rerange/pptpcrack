@@ -1,5 +1,10 @@
-// By Orange
-// A Generic MSCHAPv2/MPPE implementation in Go
+// Copyright 2019 Orange. All rights reserved.
+// A Generic EAP/MPPE implementation in Go
+//
+// Use of this source code is governed by a MIT license
+// that can be found in the LICENSE file in the root of the source
+// tree.
+// RFC Reference:
 //    https://tools.ietf.org/html/rfc2759#section-8
 //    https://tools.ietf.org/html/rfc3078
 //    https://tools.ietf.org/html/rfc3079
