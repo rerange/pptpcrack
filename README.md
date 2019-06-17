@@ -1,6 +1,17 @@
-# PPTP-Crack
- 
-A Generic EAP/MPPE Implementation in Go By  [Orange](https://github.com/rerange)
+<h1 align="center">Welcome to PPTP-Crack 👋</h1>
+<p>
+  <img src="https://img.shields.io/badge/version-0.1-blue.svg?cacheSeconds=2592000" />
+</p>
+
+> A Generic EAP/MPPE Implementation in Go
+
+### 🏠 [Homepage](https://github.com/rerange/pptpcrack)
+
+## Install
+
+```sh
+make install
+```
 
 ## Prerequisite
 
@@ -29,3 +40,26 @@ pptpcrack -f dump.pcap -o dump_decrypt.pcap -w wordlist.txt
 >-o string Filename of decrypted packets to write to
 
 >-w string Filename of password list to crack MS-CHAP-V2 handshake
+
+## Run tests
+
+```sh
+make test
+```
+
+## Author
+
+👤 **orange**
+
+* Github: [@rerange](https://github.com/rerange)
+
+## 🤝 Contributing
+
+Contributions, issues and feature requests are welcome!<br />Feel free to check [issues page](https://github.com/rerange/pptpcrack/issues).
+
+## Show your support
+
+Give a ⭐️ if this project helped you!
+
+***
+_This README was generated with ❤️ by [readme-md-generator](https://github.com/kefranabg/readme-md-generator)_
