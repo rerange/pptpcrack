@@ -15,7 +15,7 @@ make install
 
 ## Prerequisite
 
-Install [WinPcap_4_1_3](https://www.winpcap.org/install/default.htm) for Windows or [libpcap](https://formulae.brew.sh/formula/libpcap) for MacOS or other linux distributions
+Install [WinPcap_4_1_3](https://www.winpcap.org/install/default.htm) for Windows or [libpcap](https://formulae.brew.sh/formula/libpcap) for MacOS and other linux distributions
 
 For MacOS users:
 
